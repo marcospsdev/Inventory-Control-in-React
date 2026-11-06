@@ -9,7 +9,7 @@ interface HeadersInit {
 interface RequestOptions {
   method?: string;
   headers?: HeadersInit;
-  body?: string;
+  body?: string | FormData;
 }
 
 // Função utilitária que envolve o 'fetch' e adiciona o token
@@ -18,9 +18,10 @@ export const fetchApi = async <T>(
   options?: RequestOptions,
 ): Promise<T> => {
   const token = localStorage.getItem("authToken");
+  const isFormData = options?.body instanceof FormData;
 
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(options?.headers || {}), // Mescla os headers existentes
   };
 
@@ -33,9 +34,12 @@ export const fetchApi = async <T>(
     headers,
   });
 
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
   if (!response.ok) {
-    throw new Error("Ocorreu um erro na requisição.");
+    throw new Error(data?.error || "Ocorreu um erro na requisição.");
   }
 
-  return response.json();
+  return data as T;
 };

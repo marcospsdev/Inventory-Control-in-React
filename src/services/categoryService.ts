@@ -1,6 +1,6 @@
 import { fetchApi } from "./fetchApi";
 
-interface Category {
+export interface Category {
   id: string;
   name: string;
 }
@@ -11,7 +11,7 @@ interface CategoryData {
 
 export const categoryService = {
   getAll: async (): Promise<Category[]> => {
-    return fetchApi<Category[]>("/category/all");
+    return fetchApi<Category[]>("/categories");
   },
 
   create: async (categoryData: CategoryData): Promise<Category> => {
@@ -22,14 +22,14 @@ export const categoryService = {
   },
 
   update: async (id: string, categoryData: CategoryData): Promise<Category> => {
-    return fetchApi<Category>(`/category/edit/${id}`, {
+    return fetchApi<Category>(`/category/${id}`, {
       method: "PUT",
       body: JSON.stringify(categoryData),
     });
   },
 
   remove: async (id: string): Promise<void> => {
-    await fetchApi<void>(`/category/remove/${id}`, {
+    await fetchApi<void>(`/category/${id}`, {
       method: "DELETE",
     });
   },

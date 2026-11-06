@@ -7,8 +7,8 @@ export const LoginPage = () => {
   const navigate = useNavigate();
 
   const handleLoginSuccess = () => {
-    // Redireciona o usuário para a página de categorias após o login
-    navigate("/categories");
+    // Redireciona o usuário para a página de produtos após o login
+    navigate("/products");
   };
 
   return (

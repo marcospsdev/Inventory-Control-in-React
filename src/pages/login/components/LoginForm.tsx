@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { TextField, Button, Box, Typography, Alert } from "@mui/material";
+import { authService } from "../../../services/authService.ts";
 
 interface LoginFormProps {
   onLoginSuccess: () => void;
@@ -17,28 +18,11 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:3333/v1/session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Credenciais inválidas. Tente novamente.");
-      }
-
-      const data = await response.json();
-      // Acessa o campo 'token' diretamente do corpo da resposta
-      const { token } = data;
-
-      localStorage.setItem("authToken", token);
-
+      await authService.signIn(email, password);
       onLoginSuccess();
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        setError("Credenciais inválidas. Tente novamente.");
       } else {
         setError("Ocorreu um erro desconhecido.");
       }
