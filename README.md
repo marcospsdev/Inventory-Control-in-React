@@ -1,69 +1,155 @@
-# React + TypeScript + Vite
+# Controle de Estoque e Vendas — Front-end em React
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Front-end em React do sistema de controle de estoque, integrado à API em Node.js.
 
-Currently, two official plugins are available:
+<p align="center">
+  <img src="docs/preview.webp" alt="Produtos com imagens, categorias e indicadores de estoque" width="900">
+</p>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## Expanding the ESLint configuration
+## Sumário
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- [Visão geral](#visão-geral)
+- [Telas](#telas)
+- [Stack e versões](#stack-e-versões)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Primeiros passos](#primeiros-passos)
+- [Configuração](#configuração)
+- [Scripts](#scripts)
+- [Projetos relacionados](#projetos-relacionados)
+- [Autor](#autor)
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+## Visão geral
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Interface para gerenciar produtos, categorias, vendas e usuários de uma loja, consumindo a [API de controle de estoque](https://github.com/marcospsdev/Stock-Control-API-in-Node.js). Tem login com JWT, cards de produto com imagem e indicadores de estoque, cadastro com upload de imagem, registro de vendas com baixa no estoque e gestão de usuários por perfil (Administrador, Operador e Vendedor).
+
+Principais funcionalidades:
+
+- Login com JWT e telas por perfil de usuário
+- Produtos com imagem, categoria e indicador de estoque baixo
+- Cadastro de produto com upload de imagem
+- Vendas com baixa automática no estoque
+- Gestão de usuários e redefinição de senha
+
+Concluído em 08/2025.
+
+---
+
+## Telas
+
+Todas as telas usam dados fictícios.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/tela-01.webp" alt="Tela de vendas com baixa no estoque"><br><sub>Tela de vendas com baixa no estoque</sub></td>
+    <td width="50%"><img src="docs/tela-02.webp" alt="Cadastro de produto com upload de imagem"><br><sub>Cadastro de produto com upload de imagem</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/tela-03.webp" alt="Usuários com perfis de permissão"><br><sub>Usuários com perfis de permissão</sub></td>
+  </tr>
+</table>
+
+---
+
+## Stack e versões
+
+| Categoria | Tecnologia | Versão |
+| --- | --- | --- |
+| Linguagem | TypeScript | 5.8 |
+| UI | React | 19.1 |
+| Build | Vite | 7.1 |
+| Rotas | React Router | 7.8 |
+| Estilo | Tailwind CSS | 4.1 |
+| Componentes | Material UI | 7.3 |
+| Ícones | Material Icons | 7.3 |
+| Qualidade | ESLint + Prettier | 9.33 / 3.6 |
+
+As versões exatas estão no `package.json`.
+
+---
+
+## Estrutura do projeto
+
+```
+src/
+  assets/
+    react.svg
+  components/
+    layout/
+  config/
+    apiConfig.ts
+  lib/
+    format.ts
+  pages/
+    categories/
+    login/
+    products/
+    sales/
+    users/
+  services/
+    authService.ts
+    categoryService.ts
+    fetchApi.ts
+    productService.ts
+    userService.ts
+  App.css
+  App.tsx
+  index.css
+  main.tsx
+  vite-env.d.ts
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Primeiros passos
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Pré-requisitos
+
+- Node.js 20.19 ou mais recente
+- npm
+
+### Instalação
+
+```bash
+git clone https://github.com/marcospsdev/Inventory-Control-in-React.git
+cd Inventory-Control-in-React
+npm install
+npm run dev               # http://localhost:5173
 ```
+
+---
+
+## Configuração
+
+A URL da API fica em `src/config/apiConfig.ts` (padrão: `http://localhost:3333/v1`). Suba a API antes de rodar o front.
+
+---
+
+## Scripts
+
+| Comando | Descrição |
+| --- | --- |
+| `npm run dev` | Servidor de desenvolvimento (Vite) |
+| `npm run build` | Typecheck e build de produção em `dist/` |
+| `npm run lint` | Analisa o código com o ESLint |
+| `npm run preview` | Serve o build de produção localmente |
+
+---
+
+## Projetos relacionados
+
+- [Stock-Control-API-in-Node.js](https://github.com/marcospsdev/Stock-Control-API-in-Node.js): API REST em Node.js
+- [Inventory-Control-in-React](https://github.com/marcospsdev/Inventory-Control-in-React): front-end em React
+- [Inventory-Control-in-Angular](https://github.com/marcospsdev/Inventory-Control-in-Angular): front-end em Angular
+
+---
+
+## Autor
+
+**Marcos Paulo** · Desenvolvedor Full-Stack
+
+- LinkedIn: [in/marcospsdev](https://www.linkedin.com/in/marcospsdev)
+- GitHub: [@marcospsdev](https://github.com/marcospsdev)
