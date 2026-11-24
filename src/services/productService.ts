@@ -1,6 +1,7 @@
 import { FILES_BASE_URL } from "../config/apiConfig";
 import { categoryService, type Category } from "./categoryService";
 import { fetchApi } from "./fetchApi";
+import { toQueryString, type PageParams, type Paginated } from "./pagination";
 
 export interface Product {
   id: string;
@@ -39,11 +40,21 @@ const toFormData = (data: ProductFormData) => {
 
 export const productImageUrl = (banner: string) => `${FILES_BASE_URL}/${banner}`;
 
-export type StockSummaryItem = Pick<Product, "id" | "name" | "amount">;
+export type StockSummaryItem = Pick<Product, "id" | "name" | "amount" | "category_id">;
+
+export interface ProductPageParams extends PageParams {
+  categoryId?: string;
+}
 
 export const productService = {
   getStockSummary: async (): Promise<StockSummaryItem[]> => {
     return fetchApi<StockSummaryItem[]>("/products");
+  },
+
+  list: async ({ page, limit, search, categoryId }: ProductPageParams): Promise<Paginated<ProductWithCategory>> => {
+    return fetchApi<Paginated<ProductWithCategory>>(
+      `/products?${toQueryString({ page, limit, search, category_id: categoryId })}`,
+    );
   },
 
   getById: async (id: string): Promise<Product> => {

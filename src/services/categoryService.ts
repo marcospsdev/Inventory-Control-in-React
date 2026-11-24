@@ -1,4 +1,5 @@
 import { fetchApi } from "./fetchApi";
+import { toQueryString, type PageParams, type Paginated } from "./pagination";
 
 export interface Category {
   id: string;
@@ -12,6 +13,10 @@ interface CategoryData {
 export const categoryService = {
   getAll: async (): Promise<Category[]> => {
     return fetchApi<Category[]>("/categories");
+  },
+
+  list: async ({ page, limit, search }: PageParams): Promise<Paginated<Category>> => {
+    return fetchApi<Paginated<Category>>(`/categories?${toQueryString({ page, limit, search })}`);
   },
 
   create: async (categoryData: CategoryData): Promise<Category> => {

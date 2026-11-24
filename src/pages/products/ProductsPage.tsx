@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -28,7 +28,9 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { ProductFormDialog } from "./components/ProductFormDialog";
 import { ProductDetailDialog } from "./components/ProductDetailDialog";
-import type { Category } from "../../services/categoryService";
+import { ListPagination } from "../../components/common/ListPagination";
+import { useDebouncedValue, usePagination } from "../../hooks/usePagination";
+import { categoryService, type Category } from "../../services/categoryService";
 import {
   productImageUrl,
   productService,
@@ -39,9 +41,11 @@ import {
 import { formatCurrency } from "../../lib/format";
 
 const LOW_STOCK = 5;
+const PAGE_SIZES = [12, 24, 48];
 
 export const ProductsPage = () => {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
+  const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,35 +58,62 @@ export const ProductsPage = () => {
   const [toDelete, setToDelete] = useState<ProductWithCategory | null>(null);
   const [summary, setSummary] = useState<StockSummaryItem[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { page, limit, setPage, changeLimit } = usePagination(PAGE_SIZES[0]);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [data, stock] = await Promise.all([productService.getAllWithCategories(), productService.getStockSummary()]);
-      setProducts(data.products);
-      setCategories(data.categories);
-      setSummary(stock);
-    } catch {
-      setError("Não foi possível carregar os produtos.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const reload = () => setRefreshKey((key) => key + 1);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let ignore = false;
+    Promise.all([categoryService.getAll(), productService.getStockSummary()])
+      .then(([categoryList, stock]) => {
+        if (ignore) return;
+        setCategories(categoryList);
+        setSummary(stock);
+      })
+      .catch(() => !ignore && setError("Não foi possível carregar o resumo do estoque."));
+    return () => {
+      ignore = true;
+    };
+  }, [refreshKey]);
 
-  const filtered = useMemo(
-    () =>
-      products.filter(
-        (product) =>
-          (categoryFilter === "all" || product.category_id === categoryFilter) &&
-          product.name.toLowerCase().includes(search.trim().toLowerCase()),
-      ),
-    [products, categoryFilter, search],
-  );
+  useEffect(() => {
+    let ignore = false;
+    setIsLoading(true);
+    setError(null);
+    productService
+      .list({
+        page: page + 1,
+        limit,
+        search: debouncedSearch,
+        categoryId: categoryFilter === "all" ? undefined : categoryFilter,
+      })
+      .then((result) => {
+        if (ignore) return;
+        if (result.data.length === 0 && page > 0) {
+          setPage(Math.max(0, result.totalPages - 1));
+          return;
+        }
+        setProducts(result.data);
+        setTotal(result.total);
+      })
+      .catch(() => !ignore && setError("Não foi possível carregar os produtos."))
+      .finally(() => !ignore && setIsLoading(false));
+    return () => {
+      ignore = true;
+    };
+  }, [page, limit, debouncedSearch, categoryFilter, refreshKey, setPage]);
+
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
+
+  const changeCategory = (categoryId: string) => {
+    setCategoryFilter(categoryId);
+    setPage(0);
+  };
 
   const openForm = (product: ProductWithCategory | null) => {
     setEditing(product);
@@ -97,7 +128,7 @@ export const ProductsPage = () => {
       if (editing) await productService.update(editing.id, data);
       else await productService.create(data);
       setFormOpen(false);
-      await load();
+      reload();
     } catch {
       setFormError("Não foi possível salvar o produto.");
     } finally {
@@ -110,7 +141,7 @@ export const ProductsPage = () => {
     try {
       await productService.remove(toDelete.id);
       setToDelete(null);
-      await load();
+      reload();
     } catch {
       setError("Não foi possível excluir o produto.");
       setToDelete(null);
@@ -125,13 +156,13 @@ export const ProductsPage = () => {
     { label: "Com estoque baixo", value: lowStock, icon: <WarningAmberIcon />, color: "warning.main" },
   ];
 
-  const countBy = (categoryId: string) => products.filter((p) => p.category_id === categoryId).length;
+  const countBy = (categoryId: string) => summary.filter((item) => item.category_id === categoryId).length;
 
   return (
     <div>
       <PageHeader
         title="Produtos"
-        subtitle={`${products.length} produtos cadastrados em ${categories.length} categorias`}
+        subtitle={`${summary.length} produtos cadastrados em ${categories.length} categorias`}
         action={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => openForm(null)} disabled={isLoading}>
             Novo produto
@@ -156,15 +187,15 @@ export const ProductsPage = () => {
           size="small"
           placeholder="Buscar produto..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => changeSearch(e.target.value)}
           sx={{ width: { xs: "100%", sm: 280 }, bgcolor: "background.paper" }}
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
         />
         <Chip
-          label={`Todas (${products.length})`}
+          label={`Todas (${summary.length})`}
           color={categoryFilter === "all" ? "primary" : "default"}
           variant={categoryFilter === "all" ? "filled" : "outlined"}
-          onClick={() => setCategoryFilter("all")}
+          onClick={() => changeCategory("all")}
         />
         {categories.map((category) => (
           <Chip
@@ -172,7 +203,7 @@ export const ProductsPage = () => {
             label={`${category.name} (${countBy(category.id)})`}
             color={categoryFilter === category.id ? "primary" : "default"}
             variant={categoryFilter === category.id ? "filled" : "outlined"}
-            onClick={() => setCategoryFilter(category.id)}
+            onClick={() => changeCategory(category.id)}
           />
         ))}
       </Box>
@@ -187,13 +218,13 @@ export const ProductsPage = () => {
         <Box display="flex" justifyContent="center" mt={6}>
           <CircularProgress />
         </Box>
-      ) : filtered.length === 0 ? (
+      ) : products.length === 0 ? (
         <Typography variant="body1" sx={{ mt: 4, textAlign: "center" }} color="text.secondary">
           Nenhum produto encontrado.
         </Typography>
       ) : (
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 2.5 }}>
-          {filtered.map((product) => (
+          {products.map((product) => (
             <Card key={product.id} variant="outlined" sx={{ borderRadius: 3, display: "flex", flexDirection: "column" }}>
               <Box sx={{ position: "relative", cursor: "pointer" }} onClick={() => setDetailId(product.id)}>
                 <CardMedia component="img" image={productImageUrl(product.banner)} alt={product.name} sx={{ aspectRatio: "4 / 3", objectFit: "cover", bgcolor: "grey.100" }} />
@@ -240,6 +271,17 @@ export const ProductsPage = () => {
             </Card>
           ))}
         </Box>
+      )}
+
+      {total > 0 && (
+        <ListPagination
+          total={total}
+          page={page}
+          limit={limit}
+          limitOptions={PAGE_SIZES}
+          onPageChange={setPage}
+          onLimitChange={changeLimit}
+        />
       )}
 
       <ProductDetailDialog productId={detailId} categories={categories} onClose={() => setDetailId(null)} />

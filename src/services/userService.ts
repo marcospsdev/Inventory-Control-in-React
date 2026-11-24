@@ -1,4 +1,5 @@
 import { fetchApi } from "./fetchApi";
+import { toQueryString, type PageParams, type Paginated } from "./pagination";
 
 export interface User {
   id: string;
@@ -23,9 +24,17 @@ export const USER_PROFILES = [
 export const profileOf = (userTypeId: string) =>
   USER_PROFILES.find((profile) => profile.id === userTypeId);
 
+export interface PaginatedUsers extends Paginated<User> {
+  countsByType: Record<string, number>;
+}
+
 export const userService = {
   getAll: async (): Promise<User[]> => {
     return fetchApi<User[]>("/users");
+  },
+
+  list: async ({ page, limit, search }: PageParams): Promise<PaginatedUsers> => {
+    return fetchApi<PaginatedUsers>(`/users?${toQueryString({ page, limit, search })}`);
   },
 
   getById: async (id: string): Promise<User> => {

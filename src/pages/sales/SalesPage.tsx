@@ -7,7 +7,13 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  IconButton,
   LinearProgress,
   List,
   ListItem,
@@ -21,11 +27,19 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import PointOfSaleIcon from "@mui/icons-material/PointOfSale";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { PageHeader } from "../../components/layout/PageHeader";
+import { ListPagination } from "../../components/common/ListPagination";
+import { SearchField } from "../../components/common/SearchField";
+import { useDebouncedValue, usePagination } from "../../hooks/usePagination";
+import { authService } from "../../services/authService";
+import { saleService, type Sale } from "../../services/saleService";
+import { USER_PROFILES } from "../../services/userService";
 import {
   productImageUrl,
   productService,
@@ -33,15 +47,12 @@ import {
 } from "../../services/productService";
 import { formatCurrency } from "../../lib/format";
 
-interface SaleRecord {
-  id: number;
-  product: ProductWithCategory;
-  amount: number;
-  total: number;
-  at: Date;
-}
-
 const toNumber = (price: string) => Number(String(price).replace(",", ".")) || 0;
+const HISTORY_PAGE_SIZES = [5, 10, 25];
+const CAN_DELETE_SALES: string[] = [USER_PROFILES[0].id, USER_PROFILES[1].id];
+
+const formatSaleDate = (value: string) =>
+  new Date(value).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export const SalesPage = () => {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
@@ -50,7 +61,64 @@ export const SalesPage = () => {
   const [amount, setAmount] = useState(1);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [salesTotal, setSalesTotal] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyKey, setHistoryKey] = useState(0);
+  const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const history = usePagination(HISTORY_PAGE_SIZES[0]);
+  const { page: historyPage, limit: historyLimit, setPage: setHistoryPage } = history;
+  const debouncedHistorySearch = useDebouncedValue(historySearch.trim());
+  const canDeleteSales = CAN_DELETE_SALES.includes(authService.getUser()?.user_type_id ?? "");
+
+  useEffect(() => {
+    let ignore = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    saleService
+      .list({ page: historyPage + 1, limit: historyLimit, search: debouncedHistorySearch })
+      .then((result) => {
+        if (ignore) return;
+        if (result.data.length === 0 && historyPage > 0) {
+          setHistoryPage(Math.max(0, result.totalPages - 1));
+          return;
+        }
+        setSales(result.data);
+        setSalesTotal(result.total);
+        setTotalRevenue(result.totalRevenue);
+      })
+      .catch(() => !ignore && setHistoryError("Não foi possível carregar o histórico de vendas."))
+      .finally(() => !ignore && setHistoryLoading(false));
+    return () => {
+      ignore = true;
+    };
+  }, [historyPage, historyLimit, debouncedHistorySearch, historyKey, setHistoryPage]);
+
+  const reloadHistory = () => setHistoryKey((key) => key + 1);
+
+  const changeHistorySearch = (value: string) => {
+    setHistorySearch(value);
+    setHistoryPage(0);
+  };
+
+  const handleDeleteSale = async () => {
+    if (!saleToDelete) return;
+    setDeleting(true);
+    try {
+      await saleService.remove(saleToDelete.id);
+      setSaleToDelete(null);
+      reloadHistory();
+    } catch {
+      setHistoryError("Não foi possível excluir a venda.");
+      setSaleToDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -70,7 +138,6 @@ export const SalesPage = () => {
 
   const selected = products.find((product) => product.id === productId);
   const total = selected ? toNumber(selected.price) * amount : 0;
-  const sessionTotal = sales.reduce((acc, sale) => acc + sale.total, 0);
   const totalStock = useMemo(() => products.reduce((acc, product) => acc + product.amount, 0), [products]);
   const maxStock = Math.max(1, ...products.map((product) => product.amount));
 
@@ -81,7 +148,8 @@ export const SalesPage = () => {
     setFeedback(null);
     try {
       await productService.sell(selected.id, amount);
-      setSales((prev) => [{ id: Date.now(), product: selected, amount, total, at: new Date() }, ...prev]);
+      if (historyPage === 0) reloadHistory();
+      else setHistoryPage(0);
       setFeedback({ type: "success", message: `Venda de ${amount}x ${selected.name} registrada.` });
       setAmount(1);
       await load();
@@ -163,33 +231,76 @@ export const SalesPage = () => {
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <ReceiptLongIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Vendas desta sessão
+                  Histórico de vendas
                 </Typography>
               </Box>
-              <Chip label={formatCurrency(sessionTotal)} color="primary" sx={{ fontWeight: 700 }} />
+              <Tooltip title={`${salesTotal} vendas no total`}>
+                <Chip label={formatCurrency(totalRevenue)} color="primary" sx={{ fontWeight: 700 }} />
+              </Tooltip>
             </Box>
-            {sales.length === 0 ? (
+            <Box sx={{ mb: 1 }}>
+              <SearchField value={historySearch} placeholder="Buscar por produto..." onChange={changeHistorySearch} />
+            </Box>
+            {historyError && (
+              <Alert severity="error" sx={{ mb: 1 }}>
+                {historyError}
+              </Alert>
+            )}
+            {historyLoading ? (
+              <Box display="flex" justifyContent="center" py={4}>
+                <CircularProgress size={28} />
+              </Box>
+            ) : sales.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                Nenhuma venda registrada ainda.
+                {debouncedHistorySearch ? "Nenhuma venda encontrada." : "Nenhuma venda registrada ainda."}
               </Typography>
             ) : (
               <List disablePadding>
                 {sales.map((sale, index) => (
                   <Box key={sale.id}>
                     {index > 0 && <Divider component="li" />}
-                    <ListItem disableGutters secondaryAction={<Typography sx={{ fontWeight: 700 }}>{formatCurrency(sale.total)}</Typography>}>
+                    <ListItem
+                      disableGutters
+                      secondaryAction={
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                          <Typography sx={{ fontWeight: 700 }}>{formatCurrency(sale.total)}</Typography>
+                          {canDeleteSales && (
+                            <Tooltip title="Excluir do histórico">
+                              <IconButton size="small" color="error" onClick={() => setSaleToDelete(sale)}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      }
+                      sx={{ pr: canDeleteSales ? 15 : 10 }}
+                    >
                       <ListItemAvatar>
-                        <Avatar variant="rounded" src={productImageUrl(sale.product.banner)} />
+                        <Avatar variant="rounded" src={sale.product ? productImageUrl(sale.product.banner) : undefined}>
+                          <ReceiptLongIcon />
+                        </Avatar>
                       </ListItemAvatar>
                       <ListItemText
-                        primary={`${sale.amount}x ${sale.product.name}`}
-                        secondary={`${sale.product.category?.name ?? ""} · ${sale.at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
-                        slotProps={{ primary: { sx: { fontWeight: 600 } } }}
+                        primary={`${sale.amount}x ${sale.product_name}`}
+                        secondary={[sale.product?.category?.name ?? (sale.product ? null : "Produto removido"), formatSaleDate(sale.created_at)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        slotProps={{ primary: { sx: { fontWeight: 600 }, noWrap: true } }}
                       />
                     </ListItem>
                   </Box>
                 ))}
               </List>
+            )}
+            {salesTotal > 0 && (
+              <ListPagination
+                total={salesTotal}
+                page={historyPage}
+                limit={historyLimit}
+                limitOptions={HISTORY_PAGE_SIZES}
+                onPageChange={setHistoryPage}
+                onLimitChange={history.changeLimit}
+              />
             )}
           </CardContent>
         </Card>
@@ -248,6 +359,24 @@ export const SalesPage = () => {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <Dialog open={!!saleToDelete} onClose={() => !deleting && setSaleToDelete(null)}>
+        <DialogTitle>Excluir venda do histórico?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            A venda de <strong>{saleToDelete ? `${saleToDelete.amount}x ${saleToDelete.product_name}` : ""}</strong>
+            {saleToDelete ? ` (${formatSaleDate(saleToDelete.created_at)})` : ""} será removida do histórico. O estoque do produto não será alterado.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaleToDelete(null)} variant="outlined" disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteSale} color="error" variant="contained" disabled={deleting}>
+            {deleting ? "Excluindo..." : "Excluir"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

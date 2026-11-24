@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Button,
   Box,
@@ -14,6 +14,11 @@ import AddIcon from "@mui/icons-material/Add";
 import { CategoryList } from "./components/CategoryList";
 import { CategoryForm } from "./components/CategoryForm";
 import { categoryService } from "../../services/categoryService.ts";
+import { ListPagination } from "../../components/common/ListPagination";
+import { SearchField } from "../../components/common/SearchField";
+import { useDebouncedValue, usePagination } from "../../hooks/usePagination";
+
+const PAGE_SIZES = [5, 10, 25];
 
 interface Category {
   id: string;
@@ -30,23 +35,37 @@ export const CategoriesPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const { page, limit, setPage, changeLimit } = usePagination(PAGE_SIZES[1]);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-  const fetchCategories = async () => {
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
+
+  const fetchCategories = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await categoryService.getAll();
-      setCategories(data);
-    } catch (_err) {
+      const result = await categoryService.list({ page: page + 1, limit, search: debouncedSearch });
+      if (result.data.length === 0 && page > 0) {
+        setPage(Math.max(0, result.totalPages - 1));
+        return;
+      }
+      setCategories(result.data);
+      setTotal(result.total);
+    } catch {
       setError("Não foi possível carregar as categorias.");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, limit, debouncedSearch, setPage]);
 
   useEffect(() => {
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   const openCategoryForm = (category: Category | null) => {
     setSelectedCategory(category);
@@ -69,7 +88,7 @@ export const CategoriesPage = () => {
       }
       await fetchCategories();
       closeCategoryForm();
-    } catch (_err) {
+    } catch {
       setError("Não foi possível salvar a categoria.");
     } finally {
       setIsLoading(false);
@@ -94,7 +113,7 @@ export const CategoriesPage = () => {
         await categoryService.remove(categoryToDelete);
         await fetchCategories();
         closeDeleteConfirmation();
-      } catch (_err) {
+      } catch {
         setError("Não foi possível excluir a categoria.");
       } finally {
         setIsLoading(false);
@@ -125,11 +144,21 @@ export const CategoriesPage = () => {
       );
     }
     return (
-      <CategoryList
-        categories={categories}
-        onEdit={openCategoryForm}
-        onDelete={openDeleteConfirmation}
-      />
+      <>
+        <CategoryList
+          categories={categories}
+          onEdit={openCategoryForm}
+          onDelete={openDeleteConfirmation}
+        />
+        <ListPagination
+          total={total}
+          page={page}
+          limit={limit}
+          limitOptions={PAGE_SIZES}
+          onPageChange={setPage}
+          onLimitChange={changeLimit}
+        />
+      </>
     );
   };
 
@@ -138,15 +167,17 @@ export const CategoriesPage = () => {
       <Typography variant="h4" component="h1" gutterBottom>
         Gerenciamento de Categorias
       </Typography>
-      <Button
-        variant="contained"
-        startIcon={<AddIcon />}
-        onClick={() => openCategoryForm(null)}
-        sx={{ mb: 2 }}
-        disabled={isLoading}
-      >
-        Nova Categoria
-      </Button>
+      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1.5, mb: 2 }}>
+        <SearchField value={search} placeholder="Buscar categoria..." onChange={changeSearch} />
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => openCategoryForm(null)}
+          disabled={isLoading}
+        >
+          Nova Categoria
+        </Button>
+      </Box>
 
       {renderListContent()}
 

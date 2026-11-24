@@ -36,6 +36,11 @@ import {
   type UserFormData,
 } from "../../services/userService";
 import { initialsOf } from "../../lib/format";
+import { ListPagination } from "../../components/common/ListPagination";
+import { SearchField } from "../../components/common/SearchField";
+import { useDebouncedValue, usePagination } from "../../hooks/usePagination";
+
+const PAGE_SIZES = [5, 10, 25];
 
 const EMPTY: UserFormData = { name: "", email: "", password: "", user_type_id: USER_PROFILES[2].id };
 
@@ -56,19 +61,35 @@ export const UsersPage = () => {
   const [newPassword, setNewPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordDone, setPasswordDone] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [countsByType, setCountsByType] = useState<Record<string, number>>({});
+  const [search, setSearch] = useState("");
+  const { page, limit, setPage, changeLimit } = usePagination(PAGE_SIZES[1]);
+  const debouncedSearch = useDebouncedValue(search.trim());
+
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await userService.getAll();
-      setUsers(data.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+      const result = await userService.list({ page: page + 1, limit, search: debouncedSearch });
+      if (result.data.length === 0 && page > 0) {
+        setPage(Math.max(0, result.totalPages - 1));
+        return;
+      }
+      setUsers(result.data);
+      setTotal(result.total);
+      setCountsByType(result.countsByType);
     } catch {
       setError("Não foi possível carregar os usuários. Apenas administradores têm acesso a esta tela.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [page, limit, debouncedSearch, setPage]);
 
   useEffect(() => {
     load();
@@ -139,7 +160,7 @@ export const UsersPage = () => {
     }
   };
 
-  const countBy = (id: string) => users.filter((user) => user.user_type_id === id).length;
+  const countBy = (id: string) => countsByType[id] ?? 0;
 
   return (
     <div>
@@ -173,6 +194,10 @@ export const UsersPage = () => {
         </Alert>
       )}
 
+      <Box sx={{ mb: 2 }}>
+        <SearchField value={search} placeholder="Buscar por nome ou e-mail..." onChange={changeSearch} />
+      </Box>
+
       <Card variant="outlined" sx={{ borderRadius: 3 }}>
         {isLoading ? (
           <Box display="flex" justifyContent="center" py={6}>
@@ -190,6 +215,13 @@ export const UsersPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
+                {users.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                      Nenhum usuário encontrado.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {users.map((user) => {
                   const profile = profileOf(user.user_type_id);
                   return (
@@ -228,6 +260,14 @@ export const UsersPage = () => {
                 })}
               </TableBody>
             </Table>
+            <ListPagination
+              total={total}
+              page={page}
+              limit={limit}
+              limitOptions={PAGE_SIZES}
+              onPageChange={setPage}
+              onLimitChange={changeLimit}
+            />
           </TableContainer>
         )}
       </Card>
