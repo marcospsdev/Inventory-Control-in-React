@@ -1,4 +1,6 @@
 import { fetchApi } from "./fetchApi";
+import { toQueryString } from "./pagination";
+import type { ProductWithCategory } from "./productService";
 
 export interface AssistantMessage {
   role: "user" | "assistant";
@@ -27,6 +29,9 @@ const FRIENDLY_ERRORS: [RegExp, string][] = [
   [/image too large|file too large/i, "A imagem é grande demais para a IA. Use uma imagem de até 3,75 MB."],
   [/could not identify the product|did not return a product suggestion/i, "A IA não conseguiu identificar o produto na foto. Tente outra imagem."],
   [/did not return the sales analysis/i, "A IA não conseguiu montar a análise agora. Tente gerar de novo."],
+  [/search index is empty/i, "O índice da busca inteligente ainda está vazio. Clique em \"Indexar produtos\" para criá-lo."],
+  [/search must have between/i, "Descreva o que procura com 2 a 200 caracteres."],
+  [/model identifier is invalid|on-demand throughput isn.t supported/i, "O modelo de IA configurado não está disponível nesta região da AWS."],
 ];
 
 export const toFriendlyAssistantError = (message: string, fallback = "Não foi possível obter a resposta do assistente.") =>
@@ -54,7 +59,45 @@ export interface SalesInsights {
   usage: { inputTokens: number; outputTokens: number };
 }
 
+export interface SmartSearchResult extends ProductWithCategory {
+  score: number;
+}
+
+export interface SmartSearchResponse {
+  query: string;
+  results: SmartSearchResult[];
+  indexed: number;
+  total: number;
+  cached: boolean;
+}
+
+export interface SearchIndexStatus {
+  total: number;
+  indexed: number;
+  missing: number;
+  model: string;
+}
+
+export interface ReindexResult {
+  total: number;
+  indexed: number;
+  unchanged: number;
+  status: SearchIndexStatus;
+}
+
 export const aiService = {
+  smartSearch: async (query: string): Promise<SmartSearchResponse> => {
+    return fetchApi<SmartSearchResponse>(`/ai/search?${toQueryString({ q: query, limit: 24 })}`);
+  },
+
+  searchStatus: async (): Promise<SearchIndexStatus> => {
+    return fetchApi<SearchIndexStatus>("/ai/search/status");
+  },
+
+  reindexSearch: async (force = false): Promise<ReindexResult> => {
+    return fetchApi<ReindexResult>("/ai/search/reindex", { method: "POST", body: JSON.stringify({ force }) });
+  },
+
   salesInsights: async (days: number): Promise<SalesInsights> => {
     return fetchApi<SalesInsights>("/ai/sales-insights", { method: "POST", body: JSON.stringify({ days }) });
   },
