@@ -7,12 +7,16 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  CircularProgress,
   MenuItem,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import type { Category } from "../../../services/categoryService";
+import { AI_IMAGE_TYPES, aiService, toFriendlyAssistantError } from "../../../services/aiService";
 import {
   productImageUrl,
   type ProductFormData,
@@ -49,9 +53,13 @@ export const ProductFormDialog = ({
 }: ProductFormDialogProps) => {
   const [form, setForm] = useState<ProductFormData>(EMPTY);
   const [preview, setPreview] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<{ type: "success" | "error"; message: string; newCategory?: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setAiResult(null);
+    setAiLoading(false);
     if (product) {
       setForm({
         name: product.name,
@@ -80,7 +88,42 @@ export const ProductFormDialog = ({
 
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) set("file", file);
+    if (file) {
+      set("file", file);
+      setAiResult(null);
+    }
+  };
+
+  const fillWithAi = async () => {
+    if (!form.file) return;
+    if (!AI_IMAGE_TYPES.includes(form.file.type)) {
+      setAiResult({ type: "error", message: "Formato de imagem não suportado pela IA. Use JPG, PNG, WEBP ou GIF." });
+      return;
+    }
+    setAiLoading(true);
+    setAiResult(null);
+    try {
+      const suggestion = await aiService.suggestProduct(form.file, form.name);
+      const canChangeCategory = !product && !!suggestion.category_id;
+      setForm((prev) => ({
+        ...prev,
+        name: suggestion.name || prev.name,
+        description: suggestion.description || prev.description,
+        category_id: canChangeCategory ? suggestion.category_id! : prev.category_id,
+      }));
+      setAiResult({
+        type: "success",
+        message: "Campos preenchidos pela IA. Revise antes de salvar; preço e quantidade continuam com você.",
+        newCategory: !product && !suggestion.category_id ? suggestion.new_category_name ?? undefined : undefined,
+      });
+    } catch (err) {
+      setAiResult({
+        type: "error",
+        message: toFriendlyAssistantError(err instanceof Error ? err.message : "", "Não foi possível obter a sugestão da IA."),
+      });
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleSubmit = (event: FormEvent) => {
@@ -145,8 +188,33 @@ export const ProductFormDialog = ({
                   {form.file.name}
                 </Typography>
               )}
+              <Tooltip title={form.file ? "" : "Selecione uma foto do produto para a IA analisar"}>
+                <span>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="secondary"
+                    startIcon={aiLoading ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                    onClick={fillWithAi}
+                    disabled={!form.file || aiLoading || saving}
+                    sx={{ mt: 1.5 }}
+                  >
+                    {aiLoading ? "Analisando a foto..." : "Preencher com IA"}
+                  </Button>
+                </span>
+              </Tooltip>
             </Box>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {aiResult && (
+                <Alert severity={aiResult.type === "success" ? "info" : "warning"} icon={<AutoAwesomeIcon fontSize="inherit" />} onClose={() => setAiResult(null)}>
+                  {aiResult.message}
+                  {aiResult.newCategory && (
+                    <Box component="span" sx={{ display: "block", mt: 0.5 }}>
+                      Nenhuma categoria cadastrada combina. Sugestão de nova categoria: <strong>{aiResult.newCategory}</strong>
+                    </Box>
+                  )}
+                </Alert>
+              )}
               <TextField label="Nome" value={form.name} onChange={(e) => set("name", e.target.value)} required fullWidth />
               <TextField
                 select
