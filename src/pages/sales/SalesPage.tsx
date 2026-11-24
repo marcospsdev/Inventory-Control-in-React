@@ -39,6 +39,7 @@ import { SearchField } from "../../components/common/SearchField";
 import { useDebouncedValue, usePagination } from "../../hooks/usePagination";
 import { authService } from "../../services/authService";
 import { saleService, type Sale } from "../../services/saleService";
+import { RestockInsightsCard } from "./components/RestockInsightsCard";
 import { USER_PROFILES } from "../../services/userService";
 import {
   productImageUrl,
@@ -305,6 +306,8 @@ export const SalesPage = () => {
           </CardContent>
         </Card>
       </Box>
+
+      <RestockInsightsCard refreshKey={totalStock + historyKey} />
 
       <Card variant="outlined" sx={{ borderRadius: 3 }}>
         <CardContent sx={{ p: 3, pb: "8px !important" }}>

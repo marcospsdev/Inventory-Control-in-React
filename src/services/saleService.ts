@@ -22,7 +22,40 @@ export interface PaginatedSales extends Paginated<Sale> {
   totalUnits: number;
 }
 
+export type RestockStatus = "out" | "critical" | "low";
+
+export interface RestockItem {
+  product_id: string;
+  name: string;
+  category: string | null;
+  stock: number;
+  unitsSold: number;
+  dailyRate: number;
+  daysLeft: number | null;
+  suggestedRestock: number;
+  status: RestockStatus;
+}
+
+interface PeriodTotals {
+  sales: number;
+  units: number;
+  revenue: number;
+}
+
+export interface RestockForecast {
+  periodDays: number;
+  coverageDays: number;
+  current: PeriodTotals;
+  previous: PeriodTotals;
+  counts: Record<RestockStatus, number>;
+  items: RestockItem[];
+}
+
 export const saleService = {
+  restockForecast: async (days: number): Promise<RestockForecast> => {
+    return fetchApi<RestockForecast>(`/sales/restock-forecast?${toQueryString({ days })}`);
+  },
+
   list: async ({ page, limit, search }: PageParams): Promise<PaginatedSales> => {
     return fetchApi<PaginatedSales>(`/sales?${toQueryString({ page, limit, search })}`);
   },
