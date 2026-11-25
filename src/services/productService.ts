@@ -40,7 +40,19 @@ const toFormData = (data: ProductFormData) => {
 
 export const productImageUrl = (banner: string) => `${FILES_BASE_URL}/${banner}`;
 
-export type StockSummaryItem = Pick<Product, "id" | "name" | "amount" | "category_id">;
+export interface StockEntryItem {
+  product_id: string;
+  amount: number;
+}
+
+export interface StockEntryResult {
+  source: string;
+  reference: string | null;
+  totalUnits: number;
+  products: { id: string; name: string; amount: number; added: number }[];
+}
+
+export type StockSummaryItem =Pick<Product, "id" | "name" | "amount" | "category_id">;
 
 export interface ProductPageParams extends PageParams {
   categoryId?: string;
@@ -90,5 +102,9 @@ export const productService = {
 
   sell: async (id: string, amount: number): Promise<Pick<Product, "id" | "name" | "amount">> => {
     return fetchApi(`/sale/${id}`, { method: "PUT", body: JSON.stringify({ amount }) });
+  },
+
+  addStock: async (items: StockEntryItem[], source: "manual" | "invoice", reference?: string): Promise<StockEntryResult> => {
+    return fetchApi<StockEntryResult>("/stock-entries", { method: "POST", body: JSON.stringify({ items, source, reference }) });
   },
 };

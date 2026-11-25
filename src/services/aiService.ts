@@ -29,6 +29,9 @@ const FRIENDLY_ERRORS: [RegExp, string][] = [
   [/image too large|file too large/i, "A imagem é grande demais para a IA. Use uma imagem de até 3,75 MB."],
   [/could not identify the product|did not return a product suggestion/i, "A IA não conseguiu identificar o produto na foto. Tente outra imagem."],
   [/did not return the sales analysis/i, "A IA não conseguiu montar a análise agora. Tente gerar de novo."],
+  [/unsupported invoice format/i, "Formato não suportado. Envie a nota em PDF, JPG, PNG ou WEBP."],
+  [/invoice file too large/i, "O arquivo da nota é grande demais. Envie um arquivo de até 4,5 MB."],
+  [/no products were found in the invoice/i, "A IA não encontrou produtos nesse documento. Confira se é uma nota ou pedido legível."],
   [/search index is empty/i, "O índice da busca inteligente ainda está vazio. Clique em \"Indexar produtos\" para criá-lo."],
   [/search must have between/i, "Descreva o que procura com 2 a 200 caracteres."],
   [/model identifier is invalid|on-demand throughput isn.t supported/i, "O modelo de IA configurado não está disponível nesta região da AWS."],
@@ -48,6 +51,25 @@ export interface ProductSuggestion {
 }
 
 export const AI_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+export const AI_INVOICE_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+
+export interface InvoiceItem {
+  description: string;
+  quantity: number | null;
+  unit_price: number | null;
+  product_id: string | null;
+  product_name: string | null;
+  current_stock: number | null;
+}
+
+export interface InvoiceExtraction {
+  supplier: string | null;
+  invoice_number: string | null;
+  issue_date: string | null;
+  items: InvoiceItem[];
+  matched: number;
+  usage: { inputTokens: number; outputTokens: number };
+}
 
 export interface SalesInsights {
   periodDays: number;
@@ -86,6 +108,12 @@ export interface ReindexResult {
 }
 
 export const aiService = {
+  extractInvoice: async (file: File): Promise<InvoiceExtraction> => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetchApi<InvoiceExtraction>("/ai/invoice-extraction", { method: "POST", body: form });
+  },
+
   smartSearch: async (query: string): Promise<SmartSearchResponse> => {
     return fetchApi<SmartSearchResponse>(`/ai/search?${toQueryString({ q: query, limit: 24 })}`);
   },

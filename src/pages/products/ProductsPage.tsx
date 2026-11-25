@@ -27,6 +27,8 @@ import LayersIcon from "@mui/icons-material/Layers";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CloseIcon from "@mui/icons-material/Close";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import { InvoiceImportDialog } from "./components/InvoiceImportDialog";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useSmartSearch } from "./hooks/useSmartSearch";
 import { authService } from "../../services/authService";
@@ -64,6 +66,8 @@ export const ProductsPage = () => {
   const [toDelete, setToDelete] = useState<ProductWithCategory | null>(null);
   const [summary, setSummary] = useState<StockSummaryItem[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const { page, limit, setPage, changeLimit } = usePagination(PAGE_SIZES[0]);
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -180,11 +184,24 @@ export const ProductsPage = () => {
         title="Produtos"
         subtitle={`${summary.length} produtos cadastrados em ${categories.length} categorias`}
         action={
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => openForm(null)} disabled={isLoading}>
-            Novo produto
-          </Button>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            {canReindex && (
+              <Button variant="outlined" color="secondary" startIcon={<ReceiptLongIcon />} onClick={() => setImportOpen(true)} disabled={isLoading}>
+                Importar nota (IA)
+              </Button>
+            )}
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => openForm(null)} disabled={isLoading}>
+              Novo produto
+            </Button>
+          </Box>
         }
       />
+
+      {importNotice && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setImportNotice(null)}>
+          {importNotice}
+        </Alert>
+      )}
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2, mb: 3 }}>
         {stats.map((stat) => (
@@ -378,6 +395,17 @@ export const ProductsPage = () => {
       )}
 
       <ProductDetailDialog productId={detailId} categories={categories} onClose={() => setDetailId(null)} />
+
+      <InvoiceImportDialog
+        open={importOpen}
+        products={[...summary].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))}
+        onClose={() => setImportOpen(false)}
+        onImported={(message) => {
+          setImportOpen(false);
+          setImportNotice(message);
+          reload();
+        }}
+      />
 
       <ProductFormDialog
         open={formOpen}
